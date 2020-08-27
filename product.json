@@ -1,6 +1,6 @@
 {
-	"nameShort": "BSCode - OSS",
-	"nameLong": "BSCode - OSS",
+	"nameShort": "BSCode",
+	"nameLong": "BSCode",
 	"applicationName": "bscode-oss",
 	"dataFolderName": ".bscode-oss",
 	"win32MutexName": "bscodeoss",
