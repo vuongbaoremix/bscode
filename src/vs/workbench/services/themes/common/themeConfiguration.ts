@@ -16,11 +16,12 @@ import { ThemeSettings, IWorkbenchColorTheme, IWorkbenchFileIconTheme, IColorCus
 import { IConfigurationService, ConfigurationTarget } from 'vs/platform/configuration/common/configuration';
 import { isMacintosh, isWeb, isWindows } from 'vs/base/common/platform';
 
-const DEFAULT_THEME_DARK_SETTING_VALUE = 'Default Dark+';
+const DEFAULT_THEME_DARK_SETTING_VALUE = 'One Monokai';
 const DEFAULT_THEME_LIGHT_SETTING_VALUE = 'Default Light+';
 const DEFAULT_THEME_HC_SETTING_VALUE = 'Default High Contrast';
 
-const DEFAULT_FILE_ICON_THEME_SETTING_VALUE = 'vs-seti';
+// Change Default vs icon
+const DEFAULT_FILE_ICON_THEME_SETTING_VALUE = "vscode-icons" ;//'vs-seti';
 
 export const DEFAULT_PRODUCT_ICON_THEME_SETTING_VALUE = 'Default';
 

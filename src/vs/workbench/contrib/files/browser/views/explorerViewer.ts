@@ -73,6 +73,8 @@ export class ExplorerDelegate implements IListVirtualDelegate<ExplorerItem> {
 
 export const explorerRootErrorEmitter = new Emitter<URI>();
 export class ExplorerDataSource implements IAsyncDataSource<ExplorerItem | ExplorerItem[], ExplorerItem> {
+	private disposeList: IDisposable[];
+	private enableFileNesting: boolean;
 
 	constructor(
 		@IProgressService private readonly progressService: IProgressService,
@@ -80,16 +82,48 @@ export class ExplorerDataSource implements IAsyncDataSource<ExplorerItem | Explo
 		@IWorkbenchLayoutService private readonly layoutService: IWorkbenchLayoutService,
 		@IFileService private readonly fileService: IFileService,
 		@IExplorerService private readonly explorerService: IExplorerService,
+		@IConfigurationService private configurationService: IConfigurationService,
 		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService
-	) { }
+	) {
+
+		this.enableFileNesting = false;
+		this.disposeList = [];
+
+		this.onConfigurationUpdated(configurationService.getValue<IFilesConfiguration>());
+
+		this.registerListeners();
+	}
 
 	hasChildren(element: ExplorerItem | ExplorerItem[]): boolean {
-		return Array.isArray(element) || element.isDirectory;
+		return Array.isArray(element) || element.isDirectory || (this.enableFileNesting && element.isVirtualDirectory);
 	}
 
 	getChildren(element: ExplorerItem | ExplorerItem[]): Promise<ExplorerItem[]> {
 		if (Array.isArray(element)) {
 			return Promise.resolve(element);
+		}
+
+		if (element.isVirtualDirectory) {
+			const parentElements = element.parent
+				? [...element.parent.children.values()]
+				: [];
+
+			this.resolveVirtualDirectories(parentElements);
+
+			return Promise.resolve(this.enableFileNesting ? [...element.children.values()] : []);
+		}
+
+		// Return early if element is already resolved
+		if (element.isDirectoryResolved) {
+			const elementChildren = [...element.children.values()];
+
+			this.resolveVirtualDirectories(elementChildren);
+
+			if (this.enableFileNesting) {
+				return Promise.resolve(elementChildren.filter(x => !x.isVirtualDirectoryMember));
+			}
+
+			return Promise.resolve(elementChildren);
 		}
 
 		const sortOrder = this.explorerService.sortOrder;
@@ -110,6 +144,14 @@ export class ExplorerDataSource implements IAsyncDataSource<ExplorerItem | Explo
 			}
 
 			return []; // we could not resolve any children because of an error
+		}).then(items => {
+			if (this.enableFileNesting) {
+				this.resolveVirtualDirectories(items);
+
+				return items.filter(x => !x.isVirtualDirectoryMember);
+			}
+
+			return items;
 		});
 
 		this.progressService.withProgress({
@@ -119,6 +161,106 @@ export class ExplorerDataSource implements IAsyncDataSource<ExplorerItem | Explo
 
 		return promise;
 	}
+
+	private registerListeners(): void {
+		const disposeAction = this.configurationService.onDidChangeConfiguration(e => {
+			if (e.affectedKeys.includes('explorer.enableFileNesting')) {
+				this.onConfigurationUpdated(e.sourceConfig);
+			}
+		});
+
+		this.disposeList.push(disposeAction);
+	}
+
+	private onConfigurationUpdated(config: IFilesConfiguration): void {
+		this.enableFileNesting = config?.explorer?.enableFileNesting || false;
+	}
+
+	private resolveVirtualDirectories(elements: ExplorerItem[]) {
+
+		if (!this.enableFileNesting) {
+			return;
+		}
+
+		elements.forEach(x => x.setVirtualDirectoryConfig('NONE', ''));
+
+		// TODO: Dynamic nested using config
+
+		const possibleParrentElements = elements.filter(x => !x.isVirtualDirectoryMember && !x.isDirectory);
+
+		let root = new Map<string, ExplorerItem>();
+		possibleParrentElements.forEach(item => {
+			let extDotIndex = item.name.indexOf('.');
+			let ext = item.name.substr(extDotIndex + 1);
+			let name = item.name.substr(0, extDotIndex);
+
+			if (ext === 'tsx') {
+				item.children.clear();
+
+				root.set(name, item);
+			}
+		});
+
+		possibleParrentElements.forEach(item => {
+			let extDotIndex = item.name.indexOf('.');
+			let name = item.name.substr(0, extDotIndex);
+
+			let parent = root.get(name);
+
+			if (parent && item.name !== parent.name) {
+				item.setVirtualDirectoryConfig('MEMBER', parent.name);
+				parent.addVirtualChild(item);
+			}
+		});
+
+		root.forEach((value: ExplorerItem) => {
+			if (value.children.size > 0)
+				value.setVirtualDirectoryConfig('DIRECTORY', value.name);
+		});
+
+		// let virtualChildren = elements
+		// 	.filter(x => !x.isDirectory)
+		// 	.filter(x => possibleParrentElements.some(virtualDir => this.checkVirtualDirectoryNaming(virtualDir.name, x.name)))
+		// 	.map(x => {
+		// 		return {
+		// 			newParent: elements.filter(virtualDir => this.checkVirtualDirectoryNaming(virtualDir.name, x.name))[0],
+		// 			child: x
+		// 		};
+		// 	});
+
+		// virtualChildren.forEach(x => x.newParent.children.clear());
+		// virtualChildren.forEach(x => {
+		// 	x.child.setVirtualDirectoryConfig('MEMBER', x.newParent.name);
+
+		// 	x.newParent.setVirtualDirectoryConfig('DIRECTORY', x.newParent.name);
+		// 	x.newParent.addVirtualChild(x.child);
+		// });
+	}
+
+	// private checkVirtualDirectoryNaming(virtualDirectoryName: string, fileName: string): boolean {
+	// 	if (!virtualDirectoryName) {
+	// 		return false;
+	// 	}
+
+	// 	let extDotIndex = virtualDirectoryName.lastIndexOf('.');
+	// 	let ext = virtualDirectoryName.substr(extDotIndex + 1);
+	// 	let name = virtualDirectoryName.substr(0, extDotIndex);
+
+	// 	if (!name || !ext) {
+	// 		return false;
+	// 	}
+
+	// 	const virtualDirectoryPatterns = this.configurationService.getValue<IFilesConfiguration>().explorer.fileNestingPatterns
+	// 		.filter(x => x.includes('{filename}') && x.includes('{ext}'));
+
+	// 	return virtualDirectoryPatterns.some(pattern => {
+	// 		let expression = pattern
+	// 			.replace('{filename}', name)
+	// 			.replace('{ext}', ext);
+
+	// 		return new RegExp(expression).test(fileName);
+	// 	});
+	// }
 }
 
 export interface ICompressedNavigationController {

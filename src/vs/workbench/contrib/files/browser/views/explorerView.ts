@@ -53,6 +53,7 @@ import { SIDE_BAR_BACKGROUND } from 'vs/workbench/common/theme';
 import { IViewDescriptorService } from 'vs/workbench/common/views';
 import { IOpenerService } from 'vs/platform/opener/common/opener';
 import { IUriIdentityService } from 'vs/workbench/services/uriIdentity/common/uriIdentity';
+import { equals } from 'vs/base/common/arrays';
 
 interface IExplorerViewColors extends IColorMapping {
 	listDropBackground?: ColorValue | undefined;
@@ -148,6 +149,10 @@ export class ExplorerView extends ViewPane {
 	private autoReveal: boolean | 'focusNoScroll' = false;
 	private actions: IAction[] | undefined;
 	private decorationsProvider: ExplorerDecorationsProvider | undefined;
+
+	// File Nesting
+	private enableFileNesting = false;
+	private fileNestingPatterns: string[] = [];
 
 	constructor(
 		options: IViewPaneOptions,
@@ -470,9 +475,27 @@ export class ExplorerView extends ViewPane {
 
 	private onConfigurationUpdated(configuration: IFilesConfiguration, event?: IConfigurationChangeEvent): void {
 		this.autoReveal = configuration?.explorer?.autoReveal;
+		let enableFileNesting = configuration?.explorer?.enableFileNesting;
+		let fileNestingPatterns = configuration?.explorer?.fileNestingPatterns;
 
-		// Push down config updates to components of viewer
-		if (event && (event.affectsConfiguration('explorer.decorations.colors') || event.affectsConfiguration('explorer.decorations.badges'))) {
+		let needsRefresh = false;
+		// When file nesting configuration changes
+		// const arrayIsIncluded = (arr1: string[], arr2: string[]) => arr1.every(x => arr2.includes(x));
+
+		if ((this.enableFileNesting !== enableFileNesting) || !equals(this.fileNestingPatterns, fileNestingPatterns)) {
+			this.enableFileNesting = enableFileNesting;
+			this.fileNestingPatterns = fileNestingPatterns;
+
+			needsRefresh = true;
+		}
+
+		if (event && !needsRefresh) {
+			needsRefresh = event.affectsConfiguration('explorer.decorations.colors')
+				|| event.affectsConfiguration('explorer.decorations.badges');
+		}
+
+		// Refresh viewer as needed if this originates from a config event
+		if (event && needsRefresh) {
 			this.refresh(true);
 		}
 	}

@@ -352,6 +352,22 @@ configurationRegistry.registerConfiguration({
 			'type': 'boolean',
 			'description': nls.localize('files.simpleDialog.enable', "Enables the simple file dialog. The simple file dialog replaces the system file dialog when enabled."),
 			'default': false
+		},
+		'explorer.enableFileNesting': {
+			'type': 'boolean',
+			'description': nls.localize('enableFileNesting', "Enables file nesting based on naming"),
+			'default': true
+		},
+		'explorer.fileNestingPatterns': {
+			'type': 'array',
+			'items': {
+				'type': 'string'
+			},
+			'description': nls.localize('fileNestingPatterns', "Patterns will be applied to the file tree, use {filename} and {ext} as placeholders"),
+			'default': [
+				'{filename}\\.{ext}\\..+',
+				'{filename}\\.(.+)\\.{ext}'
+			]
 		}
 	}
 });

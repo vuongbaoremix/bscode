@@ -76,10 +76,14 @@ export class ExplorerModel implements IDisposable {
 	}
 }
 
+type VirtualDirectoryMode = 'NONE' | 'MEMBER' | 'DIRECTORY';
+
 export class ExplorerItem {
 	protected _isDirectoryResolved: boolean;
 	public isError = false;
 	private _isExcluded = false;
+	private _virtualDirectoryMode: VirtualDirectoryMode;
+	private _virtualDirectoryName: string;
 
 	constructor(
 		public resource: URI,
@@ -92,6 +96,8 @@ export class ExplorerItem {
 		private _unknown = false
 	) {
 		this._isDirectoryResolved = false;
+		this._virtualDirectoryMode = 'NONE';
+		this._virtualDirectoryName = '';
 	}
 
 	get isExcluded(): boolean {
@@ -147,6 +153,32 @@ export class ExplorerItem {
 		}
 
 		return this._parent.root;
+	}
+
+	get isVirtualDirectory() {
+		return this._virtualDirectoryMode === 'DIRECTORY';
+	}
+
+	get isVirtualDirectoryMember() {
+		return this._virtualDirectoryMode === 'MEMBER';
+	}
+
+	get virtualDirectoryName() {
+		return this._virtualDirectoryName;
+	}
+
+	/**
+	 * Configures this element as virtual directory member.
+	 */
+	setVirtualDirectoryConfig(mode: VirtualDirectoryMode, name: string) {
+		this._virtualDirectoryMode = mode;
+		this._virtualDirectoryName = name;
+	}
+
+	addVirtualChild(child: ExplorerItem): void {
+		// Inherit some parent properties to child
+		child._parent = this;
+		this.children.set(this.getPlatformAwareName(child.name), child);
 	}
 
 	@memoize get children(): Map<string, ExplorerItem> {
